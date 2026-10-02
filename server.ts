@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const USER_AGENT = 'KurohonMangaReader/1.0 (Archival Web Client)';
+const USER_AGENT = 'MikmaMangaReader/1.0 (Archival Web Client)';
 const MANGADEX_API_BASE = 'https://api.mangadex.org';
 const MANGADEX_UPLOADS_BASE = 'https://uploads.mangadex.org';
 
@@ -160,7 +160,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Kurohon server running on http://0.0.0.0:${PORT}`);
+    console.log(`Mikma server running on http://0.0.0.0:${PORT}`);
   });
 }
 

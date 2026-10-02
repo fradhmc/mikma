@@ -9,6 +9,30 @@ import {
 } from '../types/manga';
 
 const API_BASE = '/api/mangadex';
+const DIRECT_MANGADEX_BASE = 'https://api.mangadex.org';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchMangaDexJson(subPath: string): Promise<any> {
+  try {
+    const res = await fetch(`${API_BASE}${subPath}`, {
+      headers: { Accept: 'application/json' },
+    });
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      return await res.json();
+    }
+  } catch {
+    // Fallback to direct MangaDex API below if running plain Vite on localhost
+  }
+
+  const directRes = await fetch(`${DIRECT_MANGADEX_BASE}${subPath}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!directRes.ok) {
+    throw new Error(`Gagal menghubungi server MangaDex (${directRes.status})`);
+  }
+  return await directRes.json();
+}
 
 export interface GenreOption {
   id: string;
@@ -74,9 +98,7 @@ const INDONESIAN_TAG_LABELS: Record<string, string> = {
 
 export async function fetchAllGenresAndThemes(): Promise<GenreOption[]> {
   try {
-    const res = await fetch(`${API_BASE}/manga/tag`);
-    if (!res.ok) return CURATED_GENRES;
-    const json = await res.json();
+    const json = await fetchMangaDexJson('/manga/tag');
     const rawTags = Array.isArray(json.data) ? json.data : [];
     if (rawTags.length === 0) return CURATED_GENRES;
 
@@ -114,9 +136,7 @@ export async function searchAuthors(nameQuery: string): Promise<AuthorOption[]> 
     const params = new URLSearchParams();
     params.set('name', q);
     params.set('limit', '10');
-    const res = await fetch(`${API_BASE}/author?${params.toString()}`);
-    if (!res.ok) return [];
-    const json = await res.json();
+    const json = await fetchMangaDexJson(`/author?${params.toString()}`);
     const list = Array.isArray(json.data) ? json.data : [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return list
@@ -257,9 +277,7 @@ export async function fetchMangaStatistics(
   try {
     const params = new URLSearchParams();
     mangaIds.slice(0, 50).forEach((id) => params.append('manga[]', id));
-    const res = await fetch(`${API_BASE}/statistics/manga?${params.toString()}`);
-    if (!res.ok) return {};
-    const json = await res.json();
+    const json = await fetchMangaDexJson(`/statistics/manga?${params.toString()}`);
     const stats = json.statistics || {};
     const result: Record<string, { rating: number; follows: number }> = {};
 
@@ -363,12 +381,7 @@ export async function fetchMangaList(
     params.set('title', filters.query.trim());
   }
 
-  const res = await fetch(`${API_BASE}/manga?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error(`Gagal memuat daftar manga (${res.status})`);
-  }
-
-  const json = await res.json();
+  const json = await fetchMangaDexJson(`/manga?${params.toString()}`);
   const rawList = Array.isArray(json.data) ? json.data : [];
   let items: MangaItem[] = rawList.map(parseMangaEntity);
   let total = typeof json.total === 'number' ? json.total : items.length;
@@ -387,9 +400,8 @@ export async function fetchMangaList(
       const topAuthor = matchingAuthors[0];
       const authorParams = buildBaseMangaSearchParams(filters);
       authorParams.set('authorOrArtist', topAuthor.id);
-      const authorRes = await fetch(`${API_BASE}/manga?${authorParams.toString()}`);
-      if (authorRes.ok) {
-        const authorJson = await authorRes.json();
+      try {
+        const authorJson = await fetchMangaDexJson(`/manga?${authorParams.toString()}`);
         const authorMangaList: MangaItem[] = (
           Array.isArray(authorJson.data) ? authorJson.data : []
         ).map(parseMangaEntity);
@@ -405,6 +417,8 @@ export async function fetchMangaList(
           resolvedAuthor = topAuthor;
           total = Math.max(total, items.length);
         }
+      } catch {
+        // Ignore secondary author fallback error
       }
     }
   }
@@ -431,12 +445,7 @@ export async function fetchMangaById(mangaId: string): Promise<MangaItem> {
   params.append('includes[]', 'author');
   params.append('includes[]', 'artist');
 
-  const res = await fetch(`${API_BASE}/manga/${encodeURIComponent(mangaId)}?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error('Gagal memuat detail manga dari MangaDex.');
-  }
-
-  const json = await res.json();
+  const json = await fetchMangaDexJson(`/manga/${encodeURIComponent(mangaId)}?${params.toString()}`);
   const item = parseMangaEntity(json.data);
   const statsMap = await fetchMangaStatistics([item.id]);
   if (statsMap[item.id]) {
@@ -454,11 +463,7 @@ export async function fetchRandomManga(): Promise<MangaItem> {
   params.append('contentRating[]', 'safe');
   params.append('contentRating[]', 'suggestive');
 
-  const res = await fetch(`${API_BASE}/manga/random?${params.toString()}`);
-  if (!res.ok) {
-    throw new Error('Gagal mengambil manga acak.');
-  }
-  const json = await res.json();
+  const json = await fetchMangaDexJson(`/manga/random?${params.toString()}`);
   return parseMangaEntity(json.data);
 }
 
@@ -489,14 +494,9 @@ export async function fetchMangaChapters(
     params.append('translatedLanguage[]', lang);
   }
 
-  const res = await fetch(
-    `${API_BASE}/manga/${encodeURIComponent(mangaId)}/feed?${params.toString()}`
+  const json = await fetchMangaDexJson(
+    `/manga/${encodeURIComponent(mangaId)}/feed?${params.toString()}`
   );
-  if (!res.ok) {
-    throw new Error('Gagal memuat daftar bab manga.');
-  }
-
-  const json = await res.json();
   const rawData = Array.isArray(json.data) ? json.data : [];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -533,12 +533,7 @@ export interface ChapterPagesPayload {
 }
 
 export async function fetchChapterPages(chapterId: string): Promise<ChapterPagesPayload> {
-  const res = await fetch(`${API_BASE}/at-home/server/${encodeURIComponent(chapterId)}`);
-  if (!res.ok) {
-    throw new Error('Gagal menghubungi server gambar MangaDex@Home.');
-  }
-
-  const json = await res.json();
+  const json = await fetchMangaDexJson(`/at-home/server/${encodeURIComponent(chapterId)}`);
   const baseUrl: string = json.baseUrl || 'https://uploads.mangadex.org';
   const hash: string = json.chapter?.hash || '';
   const dataFiles: string[] = Array.isArray(json.chapter?.data) ? json.chapter.data : [];
