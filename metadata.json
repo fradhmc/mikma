@@ -1,0 +1,6 @@
+{
+  "name": "Kurohon — Pustaka Manga & Pembaca Lokal",
+  "description": "Platform membaca manga tanpa login dengan penyimpanan riwayat baca serta koleksi lokal, didukung katalog resmi MangaDex API.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
